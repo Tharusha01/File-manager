@@ -100,4 +100,31 @@ export const api = {
     }),
   downloadUrl: (path: string) => `/api/files/download?path=${encodeURIComponent(path)}`,
   streamUrl: (path: string) => `/api/files/stream?path=${encodeURIComponent(path)}`,
+
+  // subtitles
+  listSubtitles: (videoPath: string) =>
+    request<SubtitleEntry[]>(
+      `/api/files/subtitles?path=${encodeURIComponent(videoPath)}`,
+    ),
+  uploadSubtitle: async (videoPath: string, file: File): Promise<SubtitleEntry> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(
+      `/api/files/subtitles?path=${encodeURIComponent(videoPath)}`,
+      { method: 'POST', credentials: 'include', body: fd },
+    );
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail ?? res.statusText);
+    }
+    return res.json();
+  },
+  subtitleUrl: (path: string) =>
+    `/api/files/subtitle?path=${encodeURIComponent(path)}`,
+};
+
+export type SubtitleEntry = {
+  name: string;
+  path: string;
+  label: string;
 };

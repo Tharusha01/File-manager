@@ -1,8 +1,18 @@
+import re
 import shutil
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import FileResponse
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from ..auth import current_user
@@ -11,6 +21,14 @@ from ..paths import relpath, resolve_safe
 from ..streaming import stream_file
 
 router = APIRouter(prefix="/api/files", tags=["files"])
+
+SUBTITLE_EXTS = {".srt", ".vtt"}
+_SRT_TIMESTAMP = re.compile(r"(\d{2}:\d{2}:\d{2}),(\d{3})")
+
+
+def _srt_to_vtt(srt: str) -> str:
+    body = _SRT_TIMESTAMP.sub(r"\1.\2", srt.lstrip("﻿"))
+    return "WEBVTT\n\n" + body
 
 
 class FileEntry(BaseModel):
@@ -95,6 +113,102 @@ async def delete_path(
         shutil.rmtree(target)
     else:
         target.unlink()
+
+
+class SubtitleEntry(BaseModel):
+    name: str
+    path: str
+    label: str
+
+
+@router.get("/subtitles", response_model=list[SubtitleEntry])
+async def list_subtitles(
+    _: Annotated[User, Depends(current_user)],
+    path: str,
+) -> list[SubtitleEntry]:
+    video = resolve_safe(path)
+    if not video.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "video not found")
+    stem = video.stem.lower()
+    out: list[SubtitleEntry] = []
+    try:
+        children = list(video.parent.iterdir())
+    except OSError:
+        return out
+    for child in children:
+        if not child.is_file() or child.suffix.lower() not in SUBTITLE_EXTS:
+            continue
+        child_stem = child.stem.lower()
+        if child_stem == stem:
+            label = child.suffix.lower().lstrip(".").upper()
+        elif child_stem.startswith(stem + "."):
+            label = child_stem[len(stem) + 1 :] or child.suffix.lower().lstrip(".")
+        else:
+            continue
+        out.append(
+            SubtitleEntry(name=child.name, path=relpath(child), label=label)
+        )
+    out.sort(key=lambda s: s.label.lower())
+    return out
+
+
+@router.post("/subtitles", response_model=SubtitleEntry, status_code=status.HTTP_201_CREATED)
+async def upload_subtitle(
+    _: Annotated[User, Depends(current_user)],
+    path: str,
+    file: Annotated[UploadFile, File()],
+) -> SubtitleEntry:
+    video = resolve_safe(path)
+    if not video.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "video not found")
+    upload_name = Path(file.filename or "").name
+    ext = Path(upload_name).suffix.lower()
+    if ext not in SUBTITLE_EXTS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "subtitle must be .srt or .vtt",
+        )
+    upload_stem = Path(upload_name).stem
+    if not upload_stem or upload_stem.lower() == video.stem.lower():
+        target_name = f"{video.stem}{ext}"
+    else:
+        target_name = f"{video.stem}.{upload_stem}{ext}"
+    target = video.parent / target_name
+    # Re-resolve through the sandbox to enforce the data-root check.
+    target = resolve_safe(relpath(target))
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "empty subtitle file")
+    target.write_bytes(raw)
+    stem = video.stem.lower()
+    label_src = target.stem.lower()
+    if label_src == stem:
+        label = ext.lstrip(".").upper()
+    elif label_src.startswith(stem + "."):
+        label = label_src[len(stem) + 1 :]
+    else:
+        label = target.stem
+    return SubtitleEntry(name=target.name, path=relpath(target), label=label)
+
+
+@router.get("/subtitle")
+async def get_subtitle(
+    _: Annotated[User, Depends(current_user)],
+    path: str,
+) -> Response:
+    target = resolve_safe(path)
+    if not target.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "subtitle not found")
+    ext = target.suffix.lower()
+    if ext not in SUBTITLE_EXTS:
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            "unsupported subtitle format",
+        )
+    text = target.read_text(encoding="utf-8", errors="replace")
+    if ext == ".srt":
+        text = _srt_to_vtt(text)
+    return Response(content=text, media_type="text/vtt; charset=utf-8")
 
 
 @router.patch("", status_code=status.HTTP_204_NO_CONTENT)

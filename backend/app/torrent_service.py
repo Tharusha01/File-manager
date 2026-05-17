@@ -290,8 +290,15 @@ class TorrentService:
                             )
                     elif t == "torrent_finished_alert":
                         try:
+                            # Pause the torrent so it stops seeding once the
+                            # download is complete. set_upload_limit(0) does
+                            # NOT disable upload — in libtorrent 0 means
+                            # unlimited — so we must pause the handle.
+                            a.handle.pause()
+                            a.handle.save_resume_data(
+                                lt.torrent_handle.save_info_dict
+                            )
                             info = _info_from_status(a.handle.status())
-                            a.handle.set_upload_limit(0)
                             await ws_manager.broadcast(
                                 {"type": "finished", "torrent": info.to_dict()}
                             )
