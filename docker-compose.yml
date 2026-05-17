@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    container_name: file-manager
+    ports:
+      - "8000:8000"
+      - "6881:6881"
+      - "6881:6881/udp"
+    volumes:
+      - ./data:/data
+    env_file: .env
+    restart: unless-stopped
