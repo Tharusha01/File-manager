@@ -18,9 +18,9 @@ export function VideoPlayer({ path }: { path: string }) {
           onError={() =>
             setError(
               isH265
-                ? "This video uses H.265/HEVC codec which your browser doesn't support. Try downloading the file and playing it with VLC or another player that supports HEVC.",
+                ? "This video uses H.265/HEVC codec which your browser doesn't support. Try downloading the file and playing it with VLC or another player that supports HEVC."
                 : "Couldn't play this file. The browser likely doesn't support its codec " +
-                    '(common with .mkv / h.265). Direct play only — transcoding is not enabled.',
+                    '(common with .mkv / h.265). Direct play only — transcoding is not enabled.'
             )
           }
         />
