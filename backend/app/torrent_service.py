@@ -97,6 +97,7 @@ class TorrentService:
                 "enable_lsd": True,
                 "enable_upnp": True,
                 "enable_natpmp": True,
+                "upload_rate_limit": settings.upload_limit,
             }
         )
         self._session = ses
@@ -157,6 +158,7 @@ class TorrentService:
         if h is None:
             return False
         h.pause()
+        h.set_upload_limit(0)
         return True
 
     async def resume(self, infohash: str) -> bool:
@@ -164,6 +166,7 @@ class TorrentService:
         if h is None:
             return False
         h.resume()
+        h.set_upload_limit(settings.upload_limit)
         return True
 
     async def remove(self, infohash: str, delete_files: bool) -> bool:
@@ -251,6 +254,7 @@ class TorrentService:
                     )
                     continue
                 self._handles[rec.infohash] = handle
+                handle.set_upload_limit(0)
             except Exception:
                 logger.exception("Failed to restore torrent %s", rec.infohash)
 
@@ -287,6 +291,7 @@ class TorrentService:
                     elif t == "torrent_finished_alert":
                         try:
                             info = _info_from_status(a.handle.status())
+                            a.handle.set_upload_limit(0)
                             await ws_manager.broadcast(
                                 {"type": "finished", "torrent": info.to_dict()}
                             )

@@ -15,6 +15,8 @@ class Settings(BaseSettings):
 
     listen_interfaces: str = "0.0.0.0:6881"
 
+    upload_limit: int = 0  # 0 = unlimited, set to 0 to disable seeding after download
+
     cookie_name: str = "fm_token"
     cookie_secure: bool = False
 

@@ -4,6 +4,7 @@ import { api } from '../api/client';
 export function VideoPlayer({ path }: { path: string }) {
   const [error, setError] = useState<string | null>(null);
   const filename = path.split('/').pop() ?? path;
+  const isH265 = /\.(hevc|x265|h265)$/i.test(filename) || /(hevc|x265|h265)/i.test(filename);
 
   return (
     <div className="flex flex-col gap-3">
@@ -16,8 +17,10 @@ export function VideoPlayer({ path }: { path: string }) {
           className="aspect-video w-full bg-black"
           onError={() =>
             setError(
-              "Couldn't play this file. The browser likely doesn't support its codec " +
-                '(common with .mkv / h.265). Direct play only — transcoding is not enabled.',
+              isH265
+                ? "This video uses H.265/HEVC codec which your browser doesn't support. Try downloading the file and playing it with VLC or another player that supports HEVC.",
+                : "Couldn't play this file. The browser likely doesn't support its codec " +
+                    '(common with .mkv / h.265). Direct play only — transcoding is not enabled.',
             )
           }
         />
